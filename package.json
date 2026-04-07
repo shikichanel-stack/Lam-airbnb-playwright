@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  "scripts": {},
+  "scripts": {
+    "test:authentication": "playwright test auth --project=chromium --headed",
+    "test:admin": "playwright test admin --project=chromium --headed"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
