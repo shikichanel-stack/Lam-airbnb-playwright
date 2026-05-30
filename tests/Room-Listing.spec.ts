@@ -11,7 +11,6 @@ test.describe('Room Listing & Search (Click-Only Flow)', () => {
 
   test('TC_01 - Should display at least 1 room on homepage', async () => {
     const count = await roomPage.getRoomCount();
-    console.log(`Số lượng phòng hiện có: ${count}`);
     expect(count).toBeGreaterThan(0);
   });
 
@@ -19,8 +18,8 @@ test.describe('Room Listing & Search (Click-Only Flow)', () => {
     // Thực hiện chọn địa điểm bằng cách click
     await roomPage.selectLocationAndSearch('Hồ Chí Minh');
 
-    // Chờ chuyển hướng sang trang kết quả (room-list)
-    await expect(page).toHaveURL(/room-list/);
+    // Trang kết quả có thể là room-list hoặc đường dẫn /rooms/
+    await expect(page).toHaveURL(/room-list|\/rooms\//);
 
     // Kiểm tra kết quả hiển thị sau khi search
     const countAfterSearch = await roomPage.getRoomCount();
@@ -31,11 +30,25 @@ test.describe('Room Listing & Search (Click-Only Flow)', () => {
     // Click vào card phòng đầu tiên
     await roomPage.clickFirstRoom();
 
-    // Kiểm tra URL trang chi tiết 
-    await expect(page).toHaveURL(/phong-thue/);
+    // Trang chi tiết: slug phong-thue hoặc đường dẫn room-detail
+    await expect(page).toHaveURL(/room-detail|phong-thue/);
     
     // Kiểm tra xem có button đặt phòng không để xác nhận đã vào đúng trang
     const bookingBtn = page.locator('button').filter({ hasText: /đặt phòng/i });
     await expect(bookingBtn).toBeVisible();
+  });
+
+  test('TC_04 - Should show search bar and room grid on load', async () => {
+    await expect(roomPage.searchBar).toBeVisible();
+    await expect(roomPage.roomCardsContainer).toBeVisible();
+  });
+
+  test('TC_05 - Should show location panel when search bar is opened', async ({ page }) => {
+    await roomPage.openLocationPicker();
+    await expect(page.getByRole('heading', { name: 'Tìm kiếm địa điểm' })).toBeVisible();
+  });
+
+  test('TC_06 - First room card should be visible', async () => {
+    await expect(roomPage.roomItems.first()).toBeVisible();
   });
 });

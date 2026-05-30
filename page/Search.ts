@@ -1,122 +1,132 @@
 import { Page, Locator, expect } from '@playwright/test';
-import { test } from 'allure-playwright';
 
 export class SearchPage {
   page: Page;
 
   locationDropdown: Locator;
-  locationOption: Locator;
-
+  locationPanel: Locator;
+  /** Ô hiển thị khoảng ngày (dd/mm/yyyy – dd/mm/yyyy). */
   dateDropdown: Locator;
-  checkInInput: Locator;
-  checkOutInput: Locator;
 
   guestDropdown: Locator;
 
   searchButton: Locator;
   roomItem: Locator;
 
+  /** Vùng lịch react-date-range sau khi mở ô ngày */
+  calendarPanel: Locator;
+
   constructor(page: Page) {
     this.page = page;
 
-    this.locationDropdown = page.locator("//div[@class='col-span-3  flex-1 px-6 py-3 flex flex-col justify-center items-center cursor-pointer ']");
-    this.locationOption = page.locator("(//div[@class=' cursor-pointer flex flex-col items-center justify-center'])[1]");
-
-    this.dateDropdown = page.locator("//div[@class='col-span-4 flex-1 smm:h-16 p-3 flex flex-col justify-center items-center cursor-pointer relative']");
-    this.checkInInput = page.locator("//span[@class='rdrDateInput rdrDateDisplayItem rdrDateDisplayItemActive']");
-    this.checkOutInput = page.locator("//span[@class='rdrDateInput rdrDateDisplayItem']");
-
-    this.guestDropdown = page.locator("//div[@class='col-span-3 flex-1 p-3 flex justify-center items-center cursor-pointer relative gap-3']");
-
-    this.searchButton = page.locator("//div[@class='bg-main ml-5 hover:bg-[#9e3e4e] duration-300 text-white rounded-full p-2 flex justify-center items-center']");
-    this.roomItem = page.locator('.room-item');
+    this.locationDropdown = page.getByText('Địa điểm', { exact: true });
+    this.locationPanel = page.getByRole('heading', { name: 'Tìm kiếm địa điểm' }).locator('xpath=..');
+    this.dateDropdown = page
+      .locator('text=/\\d{2}\\/\\d{2}\\/\\d{4}\\s*–\\s*\\d{2}\\/\\d{2}\\/\\d{4}/')
+      .first();
+    this.guestDropdown = page.getByText('Thêm khách', { exact: true });
+    // Trang chủ: icon search nằm cạnh "Thêm khách", không phải img[alt="search"] đơn giản
+    this.searchButton = page.getByRole('img', { name: 'search' }).first();
+    this.roomItem = page.locator('a[href^="/room-detail/"], a[href^="/rooms/"]');
+    this.calendarPanel = page.locator('.rdrMonths, .rdrCalendarWrapper').first();
   }
 
-  // Mở trang
+  /** Mở panel lịch (TC_Search_11). */
+  async openCalendar() {
+    await this.dateDropdown.click();
+    await this.calendarPanel.waitFor({ state: 'visible', timeout: 15_000 });
+  }
+
+  /**
+   * Điều hướng tháng (TC_Search_13).
+   * Demo dùng layout có combobox tháng/năm + nút prev/next cạnh đó (không phải class rdrPrewButton).
+   */
+  async goToNextMonth() {
+    const header = this.page.locator('.rdrMonthAndYearPickers').locator('..');
+    await header.locator(':scope > button').nth(1).click();
+  }
+
+  async goToPreviousMonth() {
+    const header = this.page.locator('.rdrMonthAndYearPickers').locator('..');
+    await header.locator(':scope > button').nth(0).click();
+  }
+
+  /** Có ít nhất một ô ngày bị khóa (quá khứ) — TC_Search_18/19. */
+  async hasDisabledPastDays(): Promise<boolean> {
+    const patterns = [
+      '.rdrDay.rdrDayDisabled',
+      '.rdrDayDisabled',
+      '.rdrCalendarWrapper button[disabled]',
+    ];
+    for (const sel of patterns) {
+      if ((await this.page.locator(sel).count()) > 0) return true;
+    }
+    return false;
+  }
+
+  /** Giảm số khách bằng nút − (TC_Search_21). */
+  async decreaseGuest(clicks: number) {
+    await this.guestDropdown.click();
+    const minusBtn = this.page.getByRole('button', { name: '-' }).first();
+    for (let i = 0; i < clicks; i++) {
+      await minusBtn.click();
+    }
+  }
+
   async goto() {
     await this.page.goto('https://demo5.cybersoft.edu.vn/');
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('networkidle').catch(() => {});
+    await this.locationDropdown.waitFor({ state: 'visible', timeout: 60_000 });
   }
 
   async selectLocation(location: string) {
-  // click mở dropdown
-  await this.locationDropdown.click();
+    await this.locationDropdown.click();
+    await this.locationPanel.waitFor({ state: 'visible' });
 
-  // đợi dropdown render
-  await this.page.waitForTimeout(1000); // UI animation (tạm thời)
-
-  // debug xem có text không
-  const option = this.page.locator(`text=${location}`).first();
-
-  if (await option.count() === 0) {
-    throw new Error(`Không tìm thấy location: ${location}`);
+    const option = this.locationPanel.getByText(location, { exact: true }).first();
+    if ((await option.count()) === 0) {
+      throw new Error(`Không tìm thấy location: ${location}`);
+    }
+    await option.click();
   }
 
-  await option.waitFor({ state: 'visible' });
-  await option.click();
-}
-
-  // Chọn ngày
   async selectDate(checkIn: string, checkOut: string) {
-    await this.checkInInput.click();
-    
-    
+    await this.dateDropdown.click();
+    const dayButton = (day: string) =>
+      this.page.locator('.rdrDayNumber span').filter({ hasText: new RegExp(`^${day}$`) }).first();
 
-    // chờ calendar load
-    await this.page.locator('span').first().waitFor();
-
-    // chọn check-in
-    const checkInDate = this.page.locator('span')
-      .filter({ hasText: checkIn })
-      .first();
-
-    await checkInDate.click();
-
-    // chọn check-out
-    const checkOutDate = this.page.locator('span')
-      .filter({ hasText: checkOut })
-      .nth(1);
-
-    await checkOutDate.click();
+    await dayButton(checkIn).waitFor({ state: 'visible', timeout: 15_000 });
+    await dayButton(checkIn).click();
+    await dayButton(checkOut).click();
   }
 
-  // Chọn guest
   async selectGuest(target: number) {
-  await this.guestDropdown.click();
-
-  // locator nút +
-  const plusBtn = this.page.locator('button:has-text("+")').first();
-
-  // locator hiển thị số guest hiện tại
-  const guestCount = this.page.locator('span').filter({ hasText: /^\d+$/ }).first();
-
-  // lấy số hiện tại
-  let current = parseInt(await guestCount.textContent() || '1');
-
-  // click + cho đủ
-  while (current < target) {
-    await plusBtn.click();
-    current++;
+    await this.guestDropdown.click();
+    const plusBtn = this.page.getByRole('button', { name: '+' }).first();
+    for (let i = 1; i < target; i++) {
+      await plusBtn.click();
+    }
   }
-}
 
-  // Click search
   async clickSearch() {
-    await this.searchButton.click();
+    await this.searchButton.click({ timeout: 15_000 });
+    await this.page.waitForURL(/\/rooms\//, { timeout: 30_000 });
+  }
+
+  async getRoomResultCount(): Promise<number> {
+    await this.roomItem.first().waitFor({ state: 'visible', timeout: 25_000 });
+    return await this.roomItem.count();
   }
 
   async verifyRoomList() {
-  await this.roomItem.first().waitFor({ state: 'visible' });
+    const count = await this.getRoomResultCount();
+    expect(count).toBeGreaterThan(0);
+  }
 
-  const count = await this.roomItem.count();
-  expect(count).toBeGreaterThan(0);
-}
-
-  // Full flow search
   async searchRoom(location: string, checkIn: string, checkOut: string, guest: string) {
     await this.selectLocation(location);
     await this.selectDate(checkIn, checkOut);
-    await this.selectGuest(parseInt(guest));
+    await this.selectGuest(parseInt(guest, 10));
     await this.clickSearch();
   }
 }
